@@ -1,0 +1,27 @@
+# Local Terraform working directories
+**/.terraform/*
+
+# Never commit state -- it can contain sensitive values and is
+# supposed to live only in the remote S3 backend anyway
+*.tfstate
+*.tfstate.*
+
+# Crash logs
+crash.log
+crash.*.log
+
+# Real variable files (contain your personal IP, key names etc.)
+# Only the .example versions are committed
+*.tfvars
+*.tfvars.json
+!*.tfvars.example
+
+# CLI history / override files
+.terraformrc
+terraform.rc
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+.DS_Store

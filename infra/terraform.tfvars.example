@@ -1,0 +1,11 @@
+# Copy this file to terraform.tfvars and fill in your own values.
+# terraform.tfvars is gitignored -- it's meant to hold values specific
+# to your machine/account, not to be committed.
+
+aws_region = "eu-west-2"
+
+# Find your public IP at https://checkip.amazonaws.com and append /32
+allowed_ssh_cidr = "203.0.113.7/32"
+
+# Name of an EC2 key pair that already exists in your account
+key_name = "your-key-pair-name"
