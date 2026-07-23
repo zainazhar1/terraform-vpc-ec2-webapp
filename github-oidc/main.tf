@@ -73,9 +73,16 @@ data "aws_iam_policy_document" "github_actions_trust" {
 
     # "aud" (audience) must always be sts.amazonaws.com for AWS OIDC.
     condition {
-      test     = "StringEquals"
-      variable = "token.actions.githubusercontent.com:aud"
-      values   = ["sts.amazonaws.com"]
+      test     = "StringLike"
+      variable = "token.actions.githubusercontent.com:sub"
+      values = [
+        # Classic format (older repos).
+        "repo:${var.github_repo}:pull_request",
+        # New format GitHub started using for newly-created repos from
+        # 15 July 2026 -- embeds immutable numeric org/repo IDs. The
+        # "*" wildcards match whatever those IDs actually are.
+        "repo:${split("/", var.github_repo)[0]}@*/${split("/", var.github_repo)[1]}@*:pull_request",
+      ]
     }
 
     # "sub" (subject) is what actually scopes this to YOUR repo, and
