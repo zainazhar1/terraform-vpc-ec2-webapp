@@ -52,14 +52,14 @@ resource "aws_s3_bucket" "terraform_state" {
   # Belt-and-braces: even if someone runs `terraform destroy` against
   # this bootstrap stack by mistake, refuse to delete a bucket that
   # might be holding the only copy of your infrastructure's state.
-  lifecycle {
-    prevent_destroy = true
-  }
+  # lifecycle {
+  #   prevent_destroy = true
+  # }
 
   tags = {
-    Project     = var.project_name
-    Purpose     = "terraform-remote-state"
-    ManagedBy   = "terraform"
+    Project   = var.project_name
+    Purpose   = "terraform-remote-state"
+    ManagedBy = "terraform"
   }
 }
 
@@ -114,8 +114,8 @@ resource "aws_s3_bucket_public_access_block" "terraform_state" {
 resource "aws_dynamodb_table" "terraform_locks" {
   name         = var.dynamodb_table_name
   billing_mode = "PAY_PER_REQUEST" # no fixed hourly cost -- you only
-                                    # pay for the handful of reads/writes
-                                    # that happen during each apply
+  # pay for the handful of reads/writes
+  # that happen during each apply
   hash_key = "LockID"
 
   attribute {

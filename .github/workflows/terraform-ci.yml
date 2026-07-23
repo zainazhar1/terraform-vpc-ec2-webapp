@@ -1,0 +1,94 @@
+name: Terraform CI
+
+# Runs on every pull request that touches the infra/ code (or this
+# workflow file itself) -- not on every push to every branch. This is
+# the "PR-gated infra changes" pattern: nobody applies anything from
+# this workflow, it only ever shows you what WOULD happen, as a
+# comment on the PR, before a human reviews and merges it.
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "infra/**"
+      - ".github/workflows/terraform-ci.yml"
+
+permissions:
+  id-token: write      # required to request the OIDC token from GitHub
+  contents: read
+  pull-requests: write # required to post the plan output as a PR comment
+
+jobs:
+  terraform:
+    name: fmt / validate / plan
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: eu-west-2
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.8"
+          # terraform_wrapper defaults to true here -- that's what
+          # lets the "Comment plan on PR" step below read
+          # steps.plan.outputs.stdout.
+
+      - name: Terraform Format Check
+        run: terraform fmt -check -recursive
+        # If this fails, it means someone committed .tf files that
+        # don't match `terraform fmt`'s canonical style -- run
+        # `terraform fmt -recursive` locally and commit the result.
+        # Deliberately NOT auto-fixed by CI: formatting the code is a
+        # local, pre-commit habit to build, not something to lean on
+        # a pipeline to paper over.
+
+      - name: Terraform Init
+        run: terraform init -input=false
+
+      - name: Terraform Validate
+        run: terraform validate
+
+      - name: Terraform Plan
+        id: plan
+        run: terraform plan -no-color -input=false
+        continue-on-error: true
+        # continue-on-error here is deliberate: we want the PR comment
+        # step below to run (and show you the error) even if plan
+        # itself fails, rather than the workflow just stopping with no
+        # visible output. The explicit failure check at the bottom of
+        # this job is what actually makes the PR check show red.
+
+      - name: Comment plan on PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const output = `#### Terraform Plan
+
+            \`\`\`
+            ${{ steps.plan.outputs.stdout }}
+            \`\`\`
+
+            ${{ steps.plan.outputs.stderr }}
+
+            *Triggered by @${{ github.actor }}, workflow \`${{ github.workflow }}\`*`;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: output
+            })
+
+      - name: Fail the job if plan failed
+        if: steps.plan.outcome == 'failure'
+        run: exit 1

@@ -12,7 +12,7 @@ variable "bucket_name" {
     someone else. Include your name/handle and a random-ish suffix, e.g.
     "sajit-tfstate-vpc-ec2-2026".
   EOT
-  type = string
+  type        = string
 }
 
 variable "dynamodb_table_name" {

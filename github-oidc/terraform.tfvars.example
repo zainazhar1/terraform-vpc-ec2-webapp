@@ -1,0 +1,7 @@
+# Copy to terraform.tfvars and fill in.
+
+aws_region           = "eu-west-2"
+github_repo           = "your-github-username/terraform-vpc-ec2-webapp"
+state_bucket_name     = "your-bucket-name-from-bootstrap"
+state_key             = "vpc-ec2-webapp/terraform.tfstate"
+dynamodb_table_name   = "terraform-locks"

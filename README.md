@@ -209,11 +209,48 @@ to do this after every teardown, not just trust the CLI output.
   project, but worth mentioning live in an interview as the more modern
   alternative.
 
+## CI/CD (GitHub Actions) -- project 3
+
+This repo also has a GitHub Actions workflow
+(`.github/workflows/terraform-ci.yml`) that runs `terraform fmt`,
+`validate`, and `plan` automatically on every pull request that
+touches `infra/`, and posts the plan output as a comment on the PR.
+Setup steps are in `CI_SETUP.md`; the design decisions worth
+explaining out loud:
+
+**No infrastructure change is ever a single click.** The workflow only
+ever runs `plan` -- never `apply`. Someone (currently just me, but the
+same principle holds at any team size) has to read the plan, in the
+PR, and merge deliberately. Automation shows you the diff; a human
+still decides.
+
+**Authentication uses GitHub's OIDC provider, not stored AWS keys.**
+The alternative -- pasting an IAM user's access key/secret into GitHub
+repo secrets -- works, but it's a long-lived credential sitting
+somewhere it can leak, get committed by accident, or just be forgotten
+about and never rotated. OIDC means GitHub mints a short-lived,
+cryptographically signed token per workflow run, and AWS trusts it via
+an IAM role (`github-oidc/`) whose trust policy is scoped to `repo:
+this-exact-repo:pull_request` -- nothing else can ever assume it, and
+there's no secret to leak in the first place because none exists.
+
+**The CI role is read-only.** It's granted AWS's managed
+`ReadOnlyAccess` policy plus narrow read/lock access to just the
+Terraform state bucket and lock table -- nowhere near enough to change
+any actual infrastructure. That's a deliberate contrast with the
+`AdministratorAccess` your own local IAM user has: broad access for a
+human, while learning, is a reasonable trade-off; broad access for an
+automated pipeline is not.
+
 ## This project on my CV
 
 > Provisioned AWS VPC/EC2 infrastructure with Terraform, using S3/DynamoDB
 > for remote state management.
 
-Everything that line implies -- subnetting, routing, security groups,
-locking-safe shared state -- is backed by an actual, explainable decision
-above, not a template I ran once.
+> Built a GitHub Actions pipeline to run Terraform validation and plan
+> checks on pull requests.
+
+Everything both lines imply -- subnetting, routing, security groups,
+locking-safe shared state, and now PR-gated changes verified by a
+credential-free CI pipeline -- is backed by an actual, explainable
+decision above, not a template I ran once.

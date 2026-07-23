@@ -3,7 +3,7 @@ terraform {
 
   required_providers {
     aws = {
-      source  = "hashicorp/aws"
+      source = "hashicorp/aws"
       # >= 5.27 because security_groups.tf uses the separate
       # aws_vpc_security_group_ingress_rule/egress_rule resources,
       # which weren't added until that version.
