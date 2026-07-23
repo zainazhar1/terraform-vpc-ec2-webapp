@@ -63,7 +63,10 @@ resource "aws_iam_openid_connect_provider" "github_actions" {
 # can.
 data "aws_iam_policy_document" "github_actions_trust" {
   statement {
-    effect  = "Allow"
+    effect = "Allow"
+    # sts:TagSession is required alongside sts:AssumeRoleWithWebIdentity
+    # because aws-actions/configure-aws-credentials attaches GitHub
+    # context as IAM role session tags by default.
     actions = ["sts:AssumeRoleWithWebIdentity", "sts:TagSession"]
 
     principals {
@@ -71,33 +74,22 @@ data "aws_iam_policy_document" "github_actions_trust" {
       identifiers = [aws_iam_openid_connect_provider.github_actions.arn]
     }
 
-    # "aud" (audience) must always be sts.amazonaws.com for AWS OIDC.
+    condition {
+      test     = "StringEquals"
+      variable = "token.actions.githubusercontent.com:aud"
+      values   = ["sts.amazonaws.com"]
+    }
+
+    # Only ONE condition on the sub key -- StringLike, covering both
+    # the classic format and the newer ID-embedded format GitHub uses
+    # for repos created from 15 July 2026 onwards.
     condition {
       test     = "StringLike"
       variable = "token.actions.githubusercontent.com:sub"
       values = [
-        # Classic format (older repos).
         "repo:${var.github_repo}:pull_request",
-        # New format GitHub started using for newly-created repos from
-        # 15 July 2026 -- embeds immutable numeric org/repo IDs. The
-        # "*" wildcards match whatever those IDs actually are.
         "repo:${split("/", var.github_repo)[0]}@*/${split("/", var.github_repo)[1]}@*:pull_request",
       ]
-    }
-
-    # "sub" (subject) is what actually scopes this to YOUR repo, and
-    # to only pull_request-triggered runs. GitHub documents this exact
-    # subject format ("repo:OWNER/REPO:pull_request") for workflows
-    # triggered by a pull request specifically -- a push-triggered
-    # workflow would have a different subject format
-    # ("repo:OWNER/REPO:ref:refs/heads/BRANCH"), so if you later add a
-    # workflow that runs on push (e.g. an "apply on merge to main"
-    # job), it needs either a second condition value here or its own
-    # separate role -- don't just widen this one.
-    condition {
-      test     = "StringEquals"
-      variable = "token.actions.githubusercontent.com:sub"
-      values   = ["repo:${var.github_repo}:pull_request"]
     }
   }
 }
