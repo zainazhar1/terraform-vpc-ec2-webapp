@@ -52,13 +52,9 @@ resource "aws_iam_openid_connect_provider" "github_actions" {
     "sts.amazonaws.com",
   ]
 
-  # AWS has trusted GitHub's TLS certificate authority directly since
-  # 2022, so this value is no longer actually checked against
-  # anything at runtime -- but the argument is still required by the
-  # resource schema. This is GitHub's own long-published thumbprint.
-  thumbprint_list = [
-    "6938fd4d98bab03faadb97b34396831e3780aea",
-  ]
+  # No thumbprint_list: as of AWS provider v5.47+, AWS validates
+  # GitHub's certificate against its own trusted CA list instead of a
+  # thumbprint you supply, and the argument became fully optional.
 }
 
 # Trust policy: WHO is allowed to assume this role, and under what
