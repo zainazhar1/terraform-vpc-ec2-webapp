@@ -21,6 +21,22 @@ jobs:
   terraform:
     name: fmt / validate / plan
     runs-on: ubuntu-latest
+    env:
+      # `terraform plan` needs values for the required variables that
+      # normally live in terraform.tfvars -- which is gitignored (it
+      # holds your personal IP + key-pair name) and so does not exist
+      # in the CI runner. Because this pipeline ONLY runs `plan`, never
+      # `apply`, these can be syntactically-valid PLACEHOLDERS: the
+      # plan checks the config is sound and shows what would change; it
+      # is never applied, so the values don't need to be real.
+      # Terraform automatically reads any env var named TF_VAR_<name>
+      # as the value of variable <name>.
+      #
+      # (If you later add an "apply on merge to main" job, THAT job
+      # would need real values -- supplied as GitHub repo variables or
+      # secrets, not hardcoded like these placeholders.)
+      TF_VAR_allowed_ssh_cidr: "203.0.113.0/32" # TEST-NET-3 doc range -- clearly a placeholder
+      TF_VAR_key_name: "ci-placeholder"
     defaults:
       run:
         working-directory: infra
