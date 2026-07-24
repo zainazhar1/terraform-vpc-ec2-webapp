@@ -53,8 +53,10 @@ resource "aws_iam_openid_connect_provider" "github_actions" {
   ]
 
   # No thumbprint_list: as of AWS provider v5.47+, AWS validates
-  # GitHub's certificate against its own trusted CA list instead of a
+  # GitHub's certificate against its own trusted CA store instead of a
   # thumbprint you supply, and the argument became fully optional.
+  # Omitting it avoids hardcoding a value that can go stale (or, as
+  # happened while building this, be transcribed one character short).
 }
 
 # Trust policy: WHO is allowed to assume this role, and under what
@@ -65,8 +67,11 @@ data "aws_iam_policy_document" "github_actions_trust" {
   statement {
     effect = "Allow"
     # sts:TagSession is required alongside sts:AssumeRoleWithWebIdentity
-    # because aws-actions/configure-aws-credentials attaches GitHub
-    # context as IAM role session tags by default.
+    # because aws-actions/configure-aws-credentials attaches several
+    # pieces of GitHub context (repo, workflow, actor, ref, etc.) as
+    # IAM role session tags by default. Without this, AWS rejects the
+    # whole combined call with a vague "not authorized to perform
+    # sts:AssumeRoleWithWebIdentity" error.
     actions = ["sts:AssumeRoleWithWebIdentity", "sts:TagSession"]
 
     principals {
@@ -74,15 +79,27 @@ data "aws_iam_policy_document" "github_actions_trust" {
       identifiers = [aws_iam_openid_connect_provider.github_actions.arn]
     }
 
+    # "aud" (audience) must always be sts.amazonaws.com for AWS OIDC.
     condition {
       test     = "StringEquals"
       variable = "token.actions.githubusercontent.com:aud"
       values   = ["sts.amazonaws.com"]
     }
 
-    # Only ONE condition on the sub key -- StringLike, covering both
-    # the classic format and the newer ID-embedded format GitHub uses
-    # for repos created from 15 July 2026 onwards.
+    # Scope to THIS repo, pull_request events only, via the `sub`
+    # claim. AWS REQUIRES a GitHub-OIDC trust policy to condition on
+    # `sub` (or `job_workflow_ref`) -- it rejects a policy scoped only
+    # on other claims like `repository`. So `sub` it is.
+    #
+    # Two patterns, because as of 15 July 2026 GitHub embeds immutable
+    # numeric IDs in `sub` for newly-created repos:
+    #   classic:  repo:owner/repo:pull_request
+    #   new:      repo:owner@<orgid>/repo@<repoid>:pull_request
+    # StringLike (not StringEquals) so the "*" wildcards match whatever
+    # those numeric IDs are. This is the ONLY condition on `sub` --
+    # do not also add a StringEquals on the same key, or AWS will
+    # require both to match at once (impossible) and every assume-role
+    # call fails with a misleading "not authorized" error.
     condition {
       test     = "StringLike"
       variable = "token.actions.githubusercontent.com:sub"
