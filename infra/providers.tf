@@ -19,7 +19,7 @@ provider "aws" {
     tags = {
       Project   = var.project_name
       ManagedBy = "terraform"
-      TestTag = "test123"
+      TestTag   = "test123"
     }
   }
 }
