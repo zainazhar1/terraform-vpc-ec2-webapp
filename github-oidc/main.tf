@@ -53,8 +53,10 @@ resource "aws_iam_openid_connect_provider" "github_actions" {
   ]
 
   # No thumbprint_list: as of AWS provider v5.47+, AWS validates
-  # GitHub's certificate against its own trusted CA list instead of a
+  # GitHub's certificate against its own trusted CA store instead of a
   # thumbprint you supply, and the argument became fully optional.
+  # Omitting it avoids hardcoding a value that can go stale (or, as
+  # happened while building this, be transcribed one character short).
 }
 
 # Trust policy: WHO is allowed to assume this role, and under what
@@ -63,8 +65,14 @@ resource "aws_iam_openid_connect_provider" "github_actions" {
 # can.
 data "aws_iam_policy_document" "github_actions_trust" {
   statement {
-    effect  = "Allow"
-    actions = ["sts:AssumeRoleWithWebIdentity"]
+    effect = "Allow"
+    # sts:TagSession is required alongside sts:AssumeRoleWithWebIdentity
+    # because aws-actions/configure-aws-credentials attaches several
+    # pieces of GitHub context (repo, workflow, actor, ref, etc.) as
+    # IAM role session tags by default. Without this, AWS rejects the
+    # whole combined call with a vague "not authorized to perform
+    # sts:AssumeRoleWithWebIdentity" error.
+    actions = ["sts:AssumeRoleWithWebIdentity", "sts:TagSession"]
 
     principals {
       type        = "Federated"
@@ -78,19 +86,27 @@ data "aws_iam_policy_document" "github_actions_trust" {
       values   = ["sts.amazonaws.com"]
     }
 
-    # "sub" (subject) is what actually scopes this to YOUR repo, and
-    # to only pull_request-triggered runs. GitHub documents this exact
-    # subject format ("repo:OWNER/REPO:pull_request") for workflows
-    # triggered by a pull request specifically -- a push-triggered
-    # workflow would have a different subject format
-    # ("repo:OWNER/REPO:ref:refs/heads/BRANCH"), so if you later add a
-    # workflow that runs on push (e.g. an "apply on merge to main"
-    # job), it needs either a second condition value here or its own
-    # separate role -- don't just widen this one.
+    # Scope to THIS repo, pull_request events only, via the `sub`
+    # claim. AWS REQUIRES a GitHub-OIDC trust policy to condition on
+    # `sub` (or `job_workflow_ref`) -- it rejects a policy scoped only
+    # on other claims like `repository`. So `sub` it is.
+    #
+    # Two patterns, because as of 15 July 2026 GitHub embeds immutable
+    # numeric IDs in `sub` for newly-created repos:
+    #   classic:  repo:owner/repo:pull_request
+    #   new:      repo:owner@<orgid>/repo@<repoid>:pull_request
+    # StringLike (not StringEquals) so the "*" wildcards match whatever
+    # those numeric IDs are. This is the ONLY condition on `sub` --
+    # do not also add a StringEquals on the same key, or AWS will
+    # require both to match at once (impossible) and every assume-role
+    # call fails with a misleading "not authorized" error.
     condition {
-      test     = "StringEquals"
+      test     = "StringLike"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = ["repo:${var.github_repo}:pull_request"]
+      values = [
+        "repo:${var.github_repo}:pull_request",
+        "repo:${split("/", var.github_repo)[0]}@*/${split("/", var.github_repo)[1]}@*:pull_request",
+      ]
     }
   }
 }
